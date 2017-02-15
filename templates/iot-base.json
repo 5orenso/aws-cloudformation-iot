@@ -1,0 +1,225 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Parameters": {
+    },
+    "Description": "IoT base setup.",
+    "Resources" : {
+        "iotVPC" : {
+            "Type" : "AWS::EC2::VPC",
+            "Properties" : {
+                "CidrBlock" : "10.1.0.0/16",
+    	        "EnableDnsSupport" : "true",
+    	        "EnableDnsHostnames" : "true",
+                "InstanceTenancy" : "default",
+                "Tags" : [ { "Key" : "Name", "Value" : "iot-vpc" } ]
+            }
+        },
+        "iotInternetGateway" : {
+            "Type" : "AWS::EC2::InternetGateway",
+            "DependsOn": ["iotVPC"],
+            "Properties" : {
+                "Tags" : [ {"Key" : "Name", "Value" : "iot-internetgateway"}]
+            }
+        },
+        "iotInternetGatewayAttachment" : {
+            "Type" : "AWS::EC2::VPCGatewayAttachment",
+            "DependsOn": ["iotInternetGateway"],
+            "Properties" : {
+                "VpcId" : {"Ref" : "iotVPC"},
+                "InternetGatewayId" : {"Ref" : "iotInternetGateway"}
+            }
+        },
+        "iotSubnetA" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Description" : "Add default subnet for eu-west-1a",
+            "Properties" : {
+                "VpcId" : { "Ref" : "iotVPC" },
+                "CidrBlock" : "10.1.16.0/20",
+                "AvailabilityZone" : { "Fn::Select": [ "0", { "Fn::GetAZs": { "Ref": "AWS::Region" } } ]},
+                "Tags" : [
+                    { "Key" : "Name", "Value" : "iot-subnet-a" },
+                    { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } }
+                ]
+            }
+        },
+        "iotSubnetB" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Description" : "Add default subnet for eu-west-1b",
+            "Properties" : {
+                "VpcId" : { "Ref" : "iotVPC" },
+                "CidrBlock" : "10.1.32.0/20",
+                "AvailabilityZone" : { "Fn::Select": [ "1", { "Fn::GetAZs": { "Ref": "AWS::Region" } } ]},
+                "Tags" : [
+                    { "Key" : "Name", "Value" : "iot-subnet-b" },
+                    { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } }
+                ]
+            }
+        },
+        "iotSubnetC" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Description" : "Add default subnet for eu-west-1c",
+            "Properties" : {
+                "VpcId" : { "Ref" : "iotVPC" },
+                "CidrBlock" : "10.1.0.0/20",
+                "AvailabilityZone" : { "Fn::Select": [ "2", { "Fn::GetAZs": { "Ref": "AWS::Region" } } ]},
+                "Tags" : [
+                    { "Key" : "Name", "Value" : "iot-subnet-c" },
+                    { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } }
+                ]
+            }
+        },
+
+        "iotSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId" : { "Ref" : "iotVPC" },
+                "GroupDescription": "Security Group for servers in out default VPC",
+                "Tags": [
+                    { "Key": "Name", "Value": "iot-subnet-sg" }
+                ]
+            }
+        },
+        "iotSecurityGroupOutboundRule": {
+            "Type": "AWS::EC2::SecurityGroupEgress",
+            "Properties": {
+                "IpProtocol": "tcp",
+                "FromPort": "0",
+                "ToPort": "65535",
+                "CidrIp": "0.0.0.0/0",
+                "GroupId": { "Fn::GetAtt": [ "iotSecurityGroup", "GroupId" ] }
+            }
+        },
+        "iotSecurityGroupInboundRuleSSH": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "IpProtocol": "tcp",
+                "FromPort": "22",
+                "ToPort": "22",
+                "CidrIp": "0.0.0.0/0",
+                "GroupId": { "Fn::GetAtt": [ "iotSecurityGroup", "GroupId"] }
+            }
+        },
+        "iotSecurityGroupInboundRuleHTTP": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "IpProtocol": "tcp",
+                "FromPort": "80",
+                "ToPort": "80",
+                "CidrIp": "0.0.0.0/0",
+                "GroupId": { "Fn::GetAtt": [ "iotSecurityGroup", "GroupId"] }
+            }
+        },
+        "iotSecurityGroupInboundRuleHTTPS": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "IpProtocol": "tcp",
+                "FromPort": "443",
+                "ToPort": "443",
+                "CidrIp": "0.0.0.0/0",
+                "GroupId": { "Fn::GetAtt": [ "iotSecurityGroup", "GroupId"] }
+            }
+        },
+        "iotRouteTable" : {
+            "Type" : "AWS::EC2::RouteTable",
+            "Description" : "IoT VPC route table.",
+            "Properties" : {
+                "VpcId" : { "Ref" : "iotVPC" },
+                "Tags" : [
+                    { "Key" : "Name", "Value" : "iot-default" },
+                    { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } }
+                ]
+            }
+        },
+        "iotMainRoute" : {
+            "Type" : "AWS::EC2::Route",
+            "Description" : "Add default route from this VPC. We probably want to throw all unknown traffic to the internet.",
+            "DependsOn": [
+                "iotRouteTable", "iotInternetGatewayAttachment"
+            ],
+            "Properties" : {
+                "RouteTableId" : { "Ref" : "iotRouteTable" },
+                "DestinationCidrBlock" : "0.0.0.0/0",
+                "GatewayId" : { "Ref" : "iotInternetGateway" }
+            }
+        },
+        "iotSubnetAssociationA" : {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "DependsOn": [
+                "iotRouteTable", "iotSubnetA"
+            ],
+            "Properties" : {
+                "SubnetId" : { "Ref" : "iotSubnetA" },
+                "RouteTableId" : { "Ref" : "iotRouteTable" }
+            }
+        },
+        "iotSubnetAssociationB" : {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "DependsOn": [
+                "iotRouteTable", "iotSubnetB"
+            ],
+            "Properties" : {
+                "SubnetId" : { "Ref" : "iotSubnetB" },
+                "RouteTableId" : { "Ref" : "iotRouteTable" }
+            }
+        },
+        "iotSubnetAssociationC" : {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "DependsOn": [
+                "iotRouteTable", "iotSubnetC"
+            ],
+            "Properties" : {
+                "SubnetId" : { "Ref" : "iotSubnetC" },
+                "RouteTableId" : { "Ref" : "iotRouteTable" }
+            }
+        },
+        "iotMqttBrokerElasticIp" : {
+            "Type" : "AWS::EC2::EIP",
+            "Properties" : {
+                "Domain" : "vpc"
+            }
+        }
+    },
+
+    "Outputs": {
+        "iotVPC" : {
+            "Description" : "IoT VPC",
+            "Value" : { "Ref" : "iotVPC" },
+            "Export" : { "Name" : "iotVPC" }
+        },
+        "outputIotSubnetA" : {
+            "Description" : "IoT Subnet A",
+            "Value" : { "Ref" : "iotSubnetA" },
+            "Export" : { "Name" : "iotSubnetA" }
+        },
+        "outputIotSubnetB" : {
+            "Description" : "IoT Subnet B",
+            "Value" : { "Ref" : "iotSubnetB" },
+            "Export" : { "Name" : "iotSubnetB" }
+        },
+        "outputIotSubnetC" : {
+            "Description" : "IoT Subnet C",
+            "Value" : { "Ref" : "iotSubnetC" },
+            "Export" : { "Name" : "iotSubnetC" }
+        },
+        "outputIotSecurityGroup" : {
+            "Description" : "IoT Security Group",
+            "Value" : { "Ref" : "iotSecurityGroup" },
+            "Export" : { "Name" : "iotSecurityGroup" }
+        },
+        "outputIotRouteTable" : {
+            "Description" : "IoT Routing table",
+            "Value" : { "Ref" : "iotRouteTable" },
+            "Export" : { "Name" : "iotRouteTable" }
+        },
+        "outputiotMqttBrokerElasticIp" : {
+            "Description" : "IoT Mqtt Broker Elastic IP",
+            "Value" : { "Ref" : "iotMqttBrokerElasticIp" },
+            "Export" : { "Name" : "iotMqttBrokerElasticIp" }
+        },
+        "outputiotMqttBrokerElasticIpAllocationId" : {
+            "Description" : "IoT Mqtt Broker Elastic IP allocation id",
+            "Value" : { "Fn::GetAtt" : ["iotMqttBrokerElasticIp", "AllocationId"] },
+            "Export" : { "Name" : "iotMqttBrokerElasticIpAllocationId" }
+        }
+    }
+}

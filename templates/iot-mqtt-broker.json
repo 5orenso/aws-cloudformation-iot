@@ -1,0 +1,260 @@
+{
+    "Parameters": {
+        "mqttBrokerImageId": {
+            "Description": "AMI image ID",
+            "Type": "AWS::EC2::Image::Id"
+        }
+    },
+    "Resources" : {
+        "iamMqttBroker": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version" : "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "iotMqttBrokerManagedPolicy": {
+            "Type" : "AWS::IAM::ManagedPolicy",
+            "DependsOn": ["iamMqttBroker"],
+            "Properties" : {
+                "PolicyDocument" : {
+                    "Version" : "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "iot:*"
+                            ],
+                            "Resource": ["*"]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "ec2:AssociateAddress",
+                                "ec2:DescribeAddresses",
+                                "ec2:DisassociateAddress"
+                            ],
+                            "Resource": ["*"]
+                        }
+                    ]
+                },
+                "Path": "/mqttbroker/",
+                "Roles" : [ { "Ref" : "iamMqttBroker" } ]
+            }
+        },
+        "iotMqttBrokerIotPolicy": {
+            "Type": "AWS::IoT::Policy",
+            "Properties": {
+                "PolicyName": "iotMqttBrokerIotPolicy",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Action": [
+                            "iot:*"
+                        ],
+                        "Resource": [
+                            "*"
+                        ]
+                    }]
+                }
+            }
+        },
+
+        "iamInstanceProfileMqttBroker": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Path": "/iot/",
+                "Roles": [{ "Ref": "iamMqttBroker" }]
+            }
+        },
+
+        "securityGroupMqttBroker": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Fn::ImportValue" : "iotVPC" },
+                "GroupDescription": "Security group for Mqtt Broker",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "89.8.0.0/15",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "176.11.0.0/16",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "109.189.0.0/16",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "89.8.0.0/15",
+                        "FromPort": "8883",
+                        "ToPort": "8883"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "176.11.0.0/16",
+                        "FromPort": "8883",
+                        "ToPort": "8883"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "109.189.0.0/16",
+                        "FromPort": "8883",
+                        "ToPort": "8883"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "89.8.0.0/15",
+                        "FromPort": "1883",
+                        "ToPort": "1883"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "176.11.0.0/16",
+                        "FromPort": "1883",
+                        "ToPort": "1883"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "109.189.0.0/16",
+                        "FromPort": "1883",
+                        "ToPort": "1883"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "iot-mqtt-broker"
+                    }
+                ]
+            }
+        },
+
+        "securityGroupMqttBrokerOutboundRule": {
+            "Type": "AWS::EC2::SecurityGroupEgress",
+            "Properties": {
+                "IpProtocol": "tcp",
+                "FromPort": "0",
+                "ToPort": "65535",
+                "CidrIp": "0.0.0.0/0",
+                "GroupId": {
+                    "Fn::GetAtt": [
+                        "securityGroupMqttBroker",
+                        "GroupId"
+                    ]
+                }
+            }
+        },
+
+        "mqttBrokerLaunchConfiguration": {
+            "Type" : "AWS::AutoScaling::LaunchConfiguration",
+            "Properties" : {
+                "ImageId": {
+                    "Ref": "mqttBrokerImageId"
+                },
+                "InstanceType": "t2.micro",
+                "AssociatePublicIpAddress": true,
+                "KeyName": "eu_webserver",
+                "SecurityGroups": [{ "Ref": "securityGroupMqttBroker" }],
+                "IamInstanceProfile": { "Ref" : "iamInstanceProfileMqttBroker" },
+                "InstanceMonitoring": true,
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : [ "", [
+                    "#!/bin/bash\n",
+                    "export LC_ALL=en_US.UTF-8\n",
+                    "ELASTIC_IP_ALLOCATION_ID=",
+                    { "Fn::ImportValue" : "iotMqttBrokerElasticIpAllocationId" },
+                    "\n",
+                    "ELASTIC_IP=",
+                    { "Fn::ImportValue" : "iotMqttBrokerElasticIp" },
+                    "\n",
+                    "INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`\n",
+                    "if [ ! -z \"$ELASTIC_IP_ALLOCATION_ID\" ]; then\n",
+                    "    # Associate Elastic IP with instance if not associated before.\n",
+                    "    CURRENT_INSTANCE_ID=$(/usr/bin/aws ec2 describe-addresses --allocation-ids $ELASTIC_IP_ALLOCATION_ID --region eu-west-1 | jq -r '.Addresses[].InstanceId')\n",
+                    "    if [[ $CURRENT_INSTANCE_ID == null ]] ; then\n",
+                    "        /usr/bin/aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id $ELASTIC_IP_ALLOCATION_ID --allow-reassociation --region eu-west-1\n",
+                    "    fi\n",
+                    "fi\n",
+                    "# Setup IoT endpoint for Mqtt Broker\n",
+                    "AWS_IOT_ENDPOINT_ADDRESS=$(/usr/bin/aws iot describe-endpoint --region eu-west-1 | jq -r '.endpointAddress')\n",
+                    "sed -i \"s/{{aws_iot_endpoint_address}}/${AWS_IOT_ENDPOINT_ADDRESS}/g\" /etc/mosquitto/conf.d/bridge.conf\n",
+                    "# Run the MQTT Broker\n",
+                    "service mosquitto restart\n"
+                ]]}}
+            }
+        },
+
+        "mqttBrokerAutoScalingGroup": {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties": {
+                "AvailabilityZones" : { "Fn::GetAZs" : { "Ref" : "AWS::Region" } },
+                "VPCZoneIdentifier" : [
+                    { "Fn::ImportValue" : "iotSubnetA" },
+                    { "Fn::ImportValue" : "iotSubnetB" },
+                    { "Fn::ImportValue" : "iotSubnetC" }
+                ],
+                "DesiredCapacity": "1",
+                "MaxSize": "1",
+                "MinSize": "1",
+                "LaunchConfigurationName": { "Ref": "mqttBrokerLaunchConfiguration" },
+                "MetricsCollection": [
+                    {
+                        "Granularity": "1Minute",
+                        "Metrics": [
+                            "GroupMinSize",
+                            "GroupMaxSize"
+                        ]
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "iot-mqtt-broker",
+                        "PropagateAtLaunch": "true"
+                    }
+                ]
+            }
+        }
+    },
+
+    "Outputs": {
+        "mqttBrokerSecurityGroup" : {
+            "Description" : "Mqtt Broker Server",
+            "Value" : { "Ref" : "securityGroupMqttBroker" },
+            "Export" : { "Name" : "iotSecurityGroupMqttBroker" }
+        },
+        "mqttBrokerPolicy": {
+            "Description": "Mqtt Broker Policy",
+            "Value" : { "Ref" : "iotMqttBrokerManagedPolicy" },
+            "Export" : { "Name" : "iotMqttBrokerManagedPolicy" }
+        },
+        "mqttBrokerIotPolicy": {
+            "Description": "Mqtt Broker Iot Policy",
+            "Value" : { "Ref" : "iotMqttBrokerIotPolicy" },
+            "Export" : { "Name" : "iotMqttBrokerIotPolicy" }
+        }
+    }
+}

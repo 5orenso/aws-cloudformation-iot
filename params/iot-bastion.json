@@ -1,0 +1,23 @@
+
+[
+    {
+        "ParameterKey": "BastionVpcId",
+        "ParameterValue": "vpc-b7a234d3"
+    },
+    {
+        "ParameterKey": "BastionImageId",
+        "ParameterValue": "ami-353f7946"
+    },
+    {
+        "ParameterKey": "BastionIP",
+        "ParameterValue": "52.50.172.236"
+    },
+    {
+        "ParameterKey": "BastionAvailabilityZone",
+        "ParameterValue": "eu-west-1a"
+    },
+    {
+        "ParameterKey": "S3ConfigBucket",
+        "ParameterValue": "tn-config"
+    }
+]

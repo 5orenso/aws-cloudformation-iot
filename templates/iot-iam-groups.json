@@ -1,0 +1,125 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Parameters": {
+    },
+    "Description": "IoT groups",
+    "Resources": {
+        "iotDeveloperGroup": {
+            "Type": "AWS::IAM::Group",
+            "Properties": {
+                "GroupName": "iot-developer"
+            }
+        },
+        "iotDeveloperGroupPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "DependsOn": [
+                "iotDeveloperGroup"
+            ],
+            "Properties": {
+                "Groups": [
+                    "iot-developer"
+                ],
+                "PolicyName": "iot-developer-policy",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": ["rds:*"],
+                            "Resource": "*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["cloudformation:*"],
+                            "Resource": "*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["iam:*"],
+                            "Resource": "*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["sns:*"],
+                            "Resource": {
+                                "Fn::Join": ["", ["arn:aws:sns:*:", {"Ref": "AWS::AccountId"}, ":iot-${aws:username}-*"]]
+                            }
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["cloudwatch:*"],
+                            "Resource": "*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["ec2:*"],
+                            "Resource": "*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["lambda:*"],
+                            "Resource": "*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["sns:*"],
+                            "Resource": {
+                                "Fn::Join": ["", ["arn:aws:sns:*:", {"Ref": "AWS::AccountId"}, ":iot-${aws:username}-*"]]
+                            }
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["s3:*"],
+                            "Resource": [
+                                "arn:aws:s3:::iot-*"
+                            ]
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["rds:*"],
+                            "Resource": "*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetBucketLocation",
+                                "s3:ListAllMyBuckets"
+                            ],
+                            "Resource": "arn:aws:s3:::*"
+                        }, {
+                            "Effect": "Allow",
+                            "Action": ["elasticloadbalancing:*"],
+                            "Resource": "*"
+                        },{
+                            "Effect": "Allow",
+                            "Action": ["autoscaling:*"],
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+
+        "iotDeveloperGroupCloudWatchFullAccess": {
+            "Type": "AWS::IAM::Group",
+            "Properties": {
+                "GroupName": "cloudwatch-full-access"
+            }
+        },
+        "iotDeveloperGroupPolicyCloudwatchFullAccess": {
+            "Type": "AWS::IAM::Policy",
+            "DependsOn": [
+                "iotDeveloperGroupCloudWatchFullAccess"
+            ],
+            "Properties": {
+                "Groups": [
+                    "cloudwatch-full-access"
+                ],
+                "PolicyName": "cloudwatch-full-access-policy",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "cloudwatch:PutMetricData"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+
+    }
+}

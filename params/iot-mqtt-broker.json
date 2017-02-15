@@ -1,0 +1,6 @@
+[
+    {
+        "ParameterKey": "mqttBrokerImageId",
+        "ParameterValue": "ami-4c53722a"
+    }
+]

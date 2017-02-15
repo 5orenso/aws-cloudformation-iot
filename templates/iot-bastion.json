@@ -1,0 +1,252 @@
+{
+    "Parameters": {
+        "BastionVpcId": {
+            "Description": "VPC ID for bastion",
+            "Type": "AWS::EC2::VPC::Id"
+        },
+        "BastionImageId": {
+            "Description": "AMI image ID",
+            "Type": "AWS::EC2::Image::Id"
+        },
+        "BastionIP": {
+            "Description": "Fixed IP for bastion server",
+            "Type": "String"
+        },
+        "BastionAvailabilityZone": {
+            "Description": "Availability Zone to put the bastion server in",
+            "Type": "AWS::EC2::AvailabilityZone::Name"
+        },
+        "S3ConfigBucket": {
+            "Description": "Bucket where the pem files are located",
+            "Type": "String"
+        }
+    },
+    "Resources" : {
+
+        "IamBastion": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "tn-bastion-iam",
+                "AssumeRolePolicyDocument": {
+                    "Version" : "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "AccessToKeyOnS3",
+                        "PolicyDocument": {
+                            "Version" : "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": ["s3:getObject"],
+                                    "Resource": {
+                                        "Fn::Join": [
+                                            "",
+                                            [
+                                                "arn:aws:s3:::",
+                                                {
+                                                    "Ref": "S3ConfigBucket"
+                                                },
+                                                "/keys/tn-purplepipe.pem"
+                                            ]
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "AssociateIpAddress",
+                        "PolicyDocument": {
+                            "Version" : "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": ["ec2:AssociateAddress"],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+
+        "IamInstanceProfileBastion": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Path": "/bastion/",
+                "Roles": [
+                    {
+                        "Ref": "IamBastion"
+                    }
+                ]
+            }
+        },
+
+        "SecurityGroupBastion": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "BastionVpcId"
+                },
+                "GroupDescription": "SG for bastion",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "89.9.248.0/24",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "89.9.249.0/24",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "89.9.250.0/24",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "89.9.251.0/24",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "tn-bastion-sg"
+                    }
+                ]
+            }
+        },
+
+        "SecurityGroupBastionOutboundRule": {
+            "Type": "AWS::EC2::SecurityGroupEgress",
+            "Properties": {
+                "IpProtocol": "tcp",
+                "FromPort": "0",
+                "ToPort": "65535",
+                "CidrIp": "0.0.0.0/0",
+                "GroupId": {
+                    "Fn::GetAtt": [
+                        "SecurityGroupBastion",
+                        "GroupId"
+                    ]
+                }
+            }
+        },
+
+        "BastionLaunchConfiguration": {
+            "Type" : "AWS::AutoScaling::LaunchConfiguration",
+            "Properties" : {
+                "ImageId": {
+                    "Ref": "BastionImageId"
+                },
+                "InstanceType": "t2.micro",
+                "KeyName": "tn-bastion",
+                "SecurityGroups": [
+                    {
+                        "Ref": "SecurityGroupBastion"
+                    }
+                ],
+                "IamInstanceProfile": {
+                    "Ref" : "IamInstanceProfileBastion"
+                },
+                "InstanceMonitoring": true,
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash\n",
+                                "ELASTIC_IP=",
+                                {
+                                    "Ref": "BastionIP"
+                                },
+                                "\n",
+                                "INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`\n",
+                                "aws ec2 associate-address --instance-id $INSTANCE_ID --public-ip $ELASTIC_IP --allow-reassociation --region eu-west-1\n",
+                                "aws s3 cp s3://",
+                                {
+                                    "Ref": "S3ConfigBucket"
+                                },
+                                "/keys/tn-purplepipe.pem /home/forward/.ssh/tn-purplepipe.pem --region eu-west-1\n",
+                                "cat >> /home/forward/.ssh/authorized_keys <<'EOF'\n",
+                                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDDftfEvDof6MTwUoX9YPgrSOkvjZ+F9O8DzKUiR0tpEsoi6C/K5+9Dh3KIT7rmM4bPyIzOW4VhY7gWxYz0xv102nzgDWkqnatq451tiLGJtkfwCD029rbh6+66xDsLFs4mDVf5sRThbTRaU5fdLT0ZRSr09pVzVQWooGxl/80jf0lZNDqg+pC/UOau7LKHK7f2NAls8Cm7SMluM6fvetJ9XQWN+c7WJYzdi7QASlB+ZHR8S41tGW4SA08SXRo6s8JcR2FAfvPp+wJNopOJpCkKB2Hrwg17+tCFdoKLXITEy0L1PwuStVwgRhRF0RUDGiu8nnJpxxh/5saocidAxIhPD+DT5/d3Xin2pLDArSOQOfEkwI5yo+y2OK1qXnbmbQB1uD3ffnF2FJ0LFpkcPE5Itew2k/YzhiGbJlqASyFLgdFZI4HmPjO76zIY2/yiKW6kBVAJlv1YTw56QjAHHpaFdiqSsnaYZJldRHkpn/szFUXuxA+oatktkVmo0L01xi9K3Datdr/6RLmSROxEymA0uyvORkN8guY+XHQnsfswX5YzFV6PqrOM1+q31Y3SHyVcmalBwH+FcuSVM9eyDBj+ZyN/ClVXqX0x4AiZKnCP2yCuZWYkOn8H3e0la8qeMGn/0AdT1skWOyCN4Rmt1lkM6FLRCV6JfM+dv4EWkCf5bQ== havard.eide@teliasonera.com\n",
+                                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDPzcYrbgxosflLVVcReuTQ6KcDCX8Gr1RSaDYBKpuqEeFXQZUjaKJlV1zIk7pS0o5bfUbrPRYAvkZNxv+0OqCNXDg0w/MVsk6GKDFZtccXqOaMGvcoHdoHSMX11u667rc/rRXYxDopNkocM30YibXjYHPuZi8/4yMRLFPkyDbUgT54dtJNDxTGCdmUHFSeQaWXN+yT4W5us+Vea3Eh+H7vCojz9+kIg7ENYKC6P0uSXBXFcm+8hAMUqD8KQS++59yMEew433av08FcIAAogMSCx1E6WOsLiH6kzfINYcBwcAFIMwMkn4QQGBeX5CqiOiNJJaxrrJVuUTnNbajtTd05bfQJzO3V7BfJ/a3sty+ZynPshfm4sus/Y8781tYQadlMRePdnpmUL2YBmYbj0+NTXSe25C0QqIwhbt4pT6g6V6AyurClD/xa5htVUztYJI/nJHPSL0G3ATALFPcQdmOLlT0tKnNseEWiGfNI0rEfi44XSRJIaB9PVgqyVsII6TVfuaD6WLGLAiY3F5h8Mzn1MkG9I9bKtLQvInPdXLAnQkOkXnxQ8b6LMJ/l0cBQ346x0q0r4WqwB86Eyfih9rBFAE39SCMgLr4WTw5hWY9MQvzk0INdbvuCHKHjGNC1qfoIIjqwdLGztLe6XGBOI+JsEUJTeLAZdLG0er5/4CayJw== shuangw@alumni.ntnu.no\n",
+                                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDRcLoinpgd6H3SvfExW3hs65P1iXaW413h4HoKG/VnXI+0pHj7xSEcMCPPIaQLFqGf2WPLSZt/kTUdy8r86xmKG60EwW+MrDQbViYHhWQrWVvuIlVhNwjwohAcTq7zSCIExYVVqaPJ18B73vbbEdBTQbZVbBtMOXbkQ2mJNVWI171wQfpEz8PJA0lhFvIBdLz5Klz/1/9vpQRECcln4Zk8vPU/uMIGtkk3rqnI7ZaqrtSxn0X8L4GGNfA6D3D4X9lcth2XjGW2apKmDxsqtv6j4t+NwzxR81vJQfFDsmGEWuK2eX3sZkQy5mp16E+RqgRS/PnIz4pi7cSKxQaiCmbP sorenso@isteins-MacBook-Pro.local\n",
+                                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDOfwOgYkWP0srvExZwiEc/cNXVFP5d95SKKoUNAPTBv8rdcUzqnCoiIvwWOdDFEHenkaIqF6ZkNHtGSNO9RRDt1xlW2c2xJTF+rSpCu8cAOBsjd301FDvdOgay7iT8uLe95jyNBz/koG1s26IMsfw6HAGpcFNe0g/7ovBfMuhL+10EfI6HG6zOIn+WgWRO/nyX8Ok8Et0U8PEpiY9t2NOWgtoIXZG47f+EdaZUXFIXkpimiHrtTGdtUe2k5uQyr+Dm3VqE/N8K+UUPRo3zla5UT9GYRYCDmzo8IYCl9OFyPJ7s9fAQRUQfVnovhoOqxeKOZTIz+0qnWxlDNg9f5XZYjnqm+WbH/1vxfCnhCKamIiH6Ba8PMgwrRjA5oypoTaHIcE0XgeE9Xmj/hjYNzK++tLWRA7MjZIbXXCEEMSbOYafbYQub3SvdhHsucp4FVQvlPPZ8zuu8ihGDOZl0ssJHIQPWnpnhUgU+8KFJ4fMhyRk6yoNyI6MQMNoef4yhroQN3B9on3gwpHilt4qHHx0vBCyqEPBeMimiDXTP2Odw9yMXxZTgrLMQXLTeIGltwgbNE5f23lt2ru7IEOe8KxCyPjPicBE6tVmF8YYL/jJkQJl9gtt5tsP/6N8Oknqn1/hQGwPgPsG4uh5iPGw5y64BNL66c1eGREdqQIVdtHAigQ== kristian.olsen@telia.no\n",
+                                "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC1YGhdk6779C+JCx1HBFYHbvHaVIhi/e4Rna21sadRwy9yRf4kW22aVQPsQS7Fj3JJkFoHr+Ike2OVDBjjP6D+x/ZScPCxyAZ65DkC14Q3HIx7sN51kQUY0VNXBaR+pAnMiKpxcoKj5/OPnvE49kz6WokvFnOWQj5H2SChxwT+x7ymM7zHsyGDOf1F96lQQWFbMdv0jglIZcQBC4yQ3jPckqCarFnJ5JZ5bhnNDFOsZVRMcY7enWfDCkSoaHZhTgmo7luHknFCPN1/yPp1TH1/KiHZlkuq5NFWW1EjwnN56shnckU9BshLsyuvvaEFwp9lP0ELFp76VFrMwUp3a57c6bZs0f1N1QFN9qD/qp/fUbc2rJSk/Oh4ysWl+LU4L+rvT9IcfE+ukT9XQfnpBnVskBjEFCFcijWBGsMWZ/WlsZOU0bP9AjHGElvrNU6giGCsaqmRs2fL30Brx2sW75dsMtxgs5JwrDh5AxIOOZx9GKInvDwucMczSD7hRXcTG19Fj8qcZzL5p7mjZ6QyVPNtIko3VhZ9w3nYbJnetSrDLRYytsCG8NQZHHNtKqfSMlJkRc5ZCN+s76HYp+4fmqVWIup069eqEA3eoHEoUSpWaFlNHI1KcvAzfx07slnAR4ZSjY6PfGynKnUeFWVNG5ceQ8lWluBixheeutDLZ81L4Q== antjoh91@gmail.com\n",
+                                "EOF\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+
+        "BastionAutoScalingGroup": {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties": {
+                "AvailabilityZones": [
+                    {
+                        "Ref": "BastionAvailabilityZone"
+                    }
+                ],
+                "DesiredCapacity": "1",
+                "MaxSize": "1",
+                "MinSize": "1",
+                "LaunchConfigurationName": {
+                    "Ref": "BastionLaunchConfiguration"
+                },
+                "MetricsCollection": [
+                    {
+                        "Granularity": "1Minute",
+                        "Metrics": [
+                            "GroupMinSize",
+                            "GroupMaxSize"
+                        ]
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "tn-bastion",
+                        "PropagateAtLaunch": "true"
+                    }
+                ]
+            }
+        }
+    },
+
+    "Outputs": {
+        "TnBastion" : {
+            "Description" : "Bastion Server",
+            "Value" : {
+                "Ref" : "SecurityGroupBastion"
+            },
+            "Export" : {
+                "Name" : "TnSecurityGroupBastion"
+            }
+        }
+    }
+}

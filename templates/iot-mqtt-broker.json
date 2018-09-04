@@ -109,6 +109,12 @@
                     },
                     {
                         "IpProtocol": "tcp",
+                        "CidrIp": "217.144.224.0/19",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "IpProtocol": "tcp",
                         "CidrIp": "89.8.0.0/15",
                         "FromPort": "8883",
                         "ToPort": "8883"
@@ -127,6 +133,12 @@
                     },
                     {
                         "IpProtocol": "tcp",
+                        "CidrIp": "217.144.224.0/19",
+                        "FromPort": "8883",
+                        "ToPort": "8883"
+                    },
+                    {
+                        "IpProtocol": "tcp",
                         "CidrIp": "89.8.0.0/15",
                         "FromPort": "1883",
                         "ToPort": "1883"
@@ -140,6 +152,12 @@
                     {
                         "IpProtocol": "tcp",
                         "CidrIp": "109.189.0.0/16",
+                        "FromPort": "1883",
+                        "ToPort": "1883"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "CidrIp": "217.144.224.0/19",
                         "FromPort": "1883",
                         "ToPort": "1883"
                     }

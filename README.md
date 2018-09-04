@@ -22,7 +22,7 @@ $ bash ./bin/create-stack.sh --template iam-users
 
 ### Update stack
 
-After every merge you can run this command to update the stack.
+After every change you can run this command to update the stack.
 
 ```bash
 # Update the base API setup
@@ -66,10 +66,12 @@ $ curl -i -X PUT -d '{
     }
   }
 }' "${CF_IOT_ES_DOMAIN_URL}/iot-nodemcu"
+```
 
 
 ## Other Resources
 
+* [AWS Basic setup with Cloudformation](https://github.com/5orenso/aws-cloudformation-base)
 * [AWS Lambda boilerplate](https://github.com/5orenso/aws-lambda-boilerplate)
 * [Automated AWS Lambda update](https://github.com/5orenso/aws-lambda-autodeploy-lambda)
 * [AWS API Gateway setup with Cloudformation](https://github.com/5orenso/aws-cloudformation-api-gateway)

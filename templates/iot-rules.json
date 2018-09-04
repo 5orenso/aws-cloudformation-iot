@@ -9,7 +9,7 @@
                 "RuleName": "nodemcuHandleIncoming",
                 "TopicRulePayload": {
                     "RuleDisabled": "false",
-                    "Sql": "SELECT *, timestamp() as timestamp, (switchSessionLength / 1000) AS switchSessionLengthSec, (switchSessionLength / 1000 / 60) AS switchSessionLengthMin, (switchSessionLength / 1000 / 60 / 60) AS switchSessionLengthHour FROM 'localgateway_to_awsiot'",
+                    "Sql": "SELECT *, timestamp() as timestamp, (switchSessionLength / 1000) AS switchSessionLengthSec, (switchSessionLength / 1000 / 60) AS switchSessionLengthMin, (switchSessionLength / 1000 / 60 / 60) AS switchSessionLengthHour, ((10 - 0.05) * ((GasMq3 - 70) / (900 - 70)) + 0.05) as alcohol_mgL, (((10 - 0.05) * ((GasMq3 - 70) / (900 - 70)) + 0.05) * 2) as alcohol_grKG FROM 'localgateway_to_awsiot'",
                     "Actions": [
                         {
                             "S3": {
@@ -70,7 +70,16 @@
                                 "MetricName": "gasMq2",
                                 "MetricNamespace": "nodemcu-sensors",
                                 "MetricUnit": "None",
-                                "MetricValue": "${gasMq2}",
+                                "MetricValue": "${GasMq2}",
+                                "RoleArn": { "Fn::GetAtt": ["iotRole", "Arn"] },
+                            }
+                        },
+                        {
+                            "CloudwatchMetric": {
+                                "MetricName": "gasMq3",
+                                "MetricNamespace": "nodemcu-sensors",
+                                "MetricUnit": "None",
+                                "MetricValue": "${GasMq3}",
                                 "RoleArn": { "Fn::GetAtt": ["iotRole", "Arn"] },
                             }
                         },
@@ -80,6 +89,25 @@
                                 "MetricNamespace": "nodemcu-sensors",
                                 "MetricUnit": "None",
                                 "MetricValue": "${waterTemp}",
+                                "RoleArn": { "Fn::GetAtt": ["iotRole", "Arn"] },
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+
+        "nodemcuTopicRuleMQ3": {
+            "Type": "AWS::IoT::TopicRule",
+            "Properties": {
+                "RuleName": "nodemcuRepublishMq3",
+                "TopicRulePayload": {
+                    "RuleDisabled": "false",
+                    "Sql": "SELECT *, timestamp() / 1000 as timestamp FROM 'localgateway_to_awsiot' WHERE GasMq3 > 0",
+                    "Actions": [
+                        {
+                            "Republish": {
+                                "Topic": "awsiot_to_localgateway",
                                 "RoleArn": { "Fn::GetAtt": ["iotRole", "Arn"] },
                             }
                         }
@@ -100,7 +128,7 @@
             "Type": "AWS::Elasticsearch::Domain",
             "Properties": {
                 "DomainName": "iot-nodemcu",
-                "ElasticsearchVersion": "5.1",
+                "ElasticsearchVersion": "5.3",
                 "ElasticsearchClusterConfig": {
                     "DedicatedMasterEnabled": "true",
                     "InstanceCount": "2",
@@ -142,7 +170,8 @@
                                         "89.8.0.0/15",
                                         "176.11.0.0/16",
                                         "109.189.0.0/16",
-                                        "212.45.160.0/19"
+                                        "212.45.160.0/19",
+                                        "217.144.224.0/19"
                                     ]
                                 }
                             },
@@ -209,20 +238,17 @@
                         },
                         {
                             "Effect": "Allow",
-                            "Action": "cloudwatch:PutMetricData",
+                            "Action": "cloudwatch:*",
+                            "Resource": "*"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": "iot:Publish",
                             "Resource": "*"
                         }
                     ]
                 }
             }
-        }
-    },
-
-    "Outputs": {
-        "iotElasticsearchURL" : {
-            "Description" : "IoT Elasticsearch URL",
-            "Value" : { "Fn::Join": ["", ["https://", { "Fn::GetAtt": [ "inputElasticsearch", "DomainEndpoint" ] }]] },
-            "Export" : { "Name" : "iotElasticsearchURL" }
         }
     }
 
